@@ -119,3 +119,21 @@ Implementation plan in ralph-loop-sized tasks. Each task states **what** to buil
 - `booked_history.json` correctly blocks re-booking and prunes.
 - Multi-account: one failed account never degrades the others.
 - Live round-trip Book→Unbook executed only with explicit user approval.
+
+---
+
+## Phase 6 — Operationalize (draft, discuss before committing to tasks)
+
+Planning in progress — items below are intentions, not finalized tasks. Each still needs What + How-to-verify.
+
+- **Containerize:** OCI image (`Containerfile`, non-root USER, no hardcoded UID — OpenShift `restricted-v2` SCC compatible), multi-arch AMD64+ARM64.
+- **CI/CD:** build the image and push it to a **public** container registry.
+  - Registry + naming to confirm: **GitHub Container Registry (GHCR)** vs docker.io; image name/tag scheme (semver + git SHA?).
+  - Credential strategy for the registry push.
+- **OpenShift manifests:** Deployment/service or long-lived Pod; Secret wiring for `MEDI_CREDS_*` and `config.yaml` (ConfigMap vs Secret); persistent volume for `booked_history.json` (or reconsider — see v2); probes/liveness; resource limits.
+- **"Maybe more" (candidates):** startup/shutdown behavior (SIGTERM handling in Pod lifecycle), standalone config validation image (sidecar/cron), observability, docs for operators.
+- Open questions to nail down tomorrow: does the daemon keep running permanently (daemon) or run per-window (CronJob/`--once`)? Volume persistence for history vs in-memory + re-scan semantics.
+
+## v2 Feature Discussion (after Phase 6)
+
+Not yet scoped. Candidate themes from v1 notes: waiting-list join, `hasLayout:true` station resolution, web UI, cancellation monitoring, push notifications.
