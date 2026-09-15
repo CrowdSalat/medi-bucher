@@ -27,7 +27,7 @@ python3 -m pip install -e .
 Runtime, read by the daemon (not committed): a [`.env`](`.env`) you source in the shell before starting booker — or export by hand. One account is keyed by `MEDI_CREDS_<NAME>`:
 
 ```
-export MEDI_CREDS_JAN_NAME=jan.weyrich@protonmail.com
+export MEDI_CREDS_JAN_NAME=example@example.de
 export MEDI_CREDS_JAN_PW=...
 ```
 
@@ -121,9 +121,3 @@ All tests run against mocked HTTP (`httpx.MockTransport`) — no credentials, no
 - `class/Search`'s `bookingUserStatus` fields can be stale/flapping; only `bookingInfo.bookingOpensOn` is authoritative.
 - The widget UI reads the schedule via an *authenticated* search endpoint; the daemon uses the *public* search endpoint — same data, no login needed for discovery.
 - `live_roundtrip.py` sends real bookings; it has a two-step safety model: without `--confirm` it only prints the plan (class, payload), with `--confirm` it Books and Unbooks the same class immediately. Never run it unattended.
-
-## Git hygiene
-
-`secrets/` and `.env` are gitignored — credentials never enter the repository. `config.yaml` is local; commit `config.example.yaml` instead.
-
-See [`03_design.md`](03_design.md) for the full design and [`04_task.md`](04_task.md) for the v1 task breakdown.
