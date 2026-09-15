@@ -92,7 +92,7 @@ PAYLOAD would POST …/class/Book {"classId":…, "partitionDate":20260921, "use
 | `booker/config.py` | config.yaml parsing + validation |
 | `booker/client.py` | `ScheduleClient` (public schedule API) + `AuthClient` (login, expiry re-login) |
 | `booker/discovery.py` | target → `eventTypeId` resolution, catalog, schedule-change detection |
-| `booker/scheduler.py` | plan/discovery loop, pre-burst verification, bA burst fire |
+| `booker/scheduler.py` | plan/discovery loop, pre-burst verification, burst fire |
 | `booker/book.py` | `BurstExecutor` — builds Book payloads, maps API results |
 | `booker/state.py` | `booked_history.json` (loaded, written, pruned) |
 | `booker/auth.py` | login, user-id resolution, token-file override |
