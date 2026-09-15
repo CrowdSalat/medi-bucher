@@ -25,16 +25,22 @@ accounts:
   - name: jan                        # maps to medi_creds_jan_name / medi_creds_jan_pw
     timezone: Europe/Berlin
     targets:                         # list of classes to monitor
-      - name: "Wirbelsäulengym"      # human label (matches schedule display name)
-        days: [1, 3]                 # weekday (1=Mon..7=Sun), or omit for "any"
-        time: "19:00"                # HH:MM, or omit for "any"
+      - name: "Wirbelsäulengym"      # schedule display name
+        day: 1                       # 1=Mon..7=Sun (matches facility series)
+        time: "19:00"                # HH:MM; the (name, day, time) triple is the identity
         priority: 1                  # lower = attempt first at release
       - name: "Aqua Fitness"
-        days: [2]
+        day: 2
         time: "17:00"
+```
 
-mode:
-  spike_window_seconds: 30           # how far before bookingOpensOn to start pre-burst verification
+**Target identity & matching:**
+- A target is identified by `(name, day, time)`. The daemon resolves it to the persistent `eventTypeId` (course template id) at discovery. `eventTypeId` is stable across weeks; the per-instance `classId` changes weekly.
+- Caveat: one display name can map to several `eventTypeId`s (facility runs separate series) — the `day` + `time` disambiguate. Reference catalog: [`docs/course_catalog.md`](docs/course_catalog.md).
+- Optional `event_type_id:` pin in config to verify the resolved template differs (warn if changed/facility recreated the series).
+
+**Schedule-change warning:**
+- At each discovery pass the daemon compares the matched occurrence's actual start (weekday + time) against the configured `(day, time)`. Mismatch → log a warning to stderr/log and **skip booking that occurrence** (fixed courses stay fixed; never silently book the wrong slot).
 ```
 
 ### 2.2 Credentials — prefixed env vars

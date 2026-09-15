@@ -15,7 +15,8 @@ The primary goal is to build a simple, automated Python daemon that monitors the
 
 ### FR-1: Flexible Target Course Matching
 * **Intent:** Allow users to define target classes easily in a configuration file without breaking when course instance IDs change week-to-week.
-* **Behavior:** The agent must match classes using a robust identifier strategy—preferring persistent parent/template IDs if available, or falling back to a combination of course attributes (e.g., Name + Day of Week + Time Slot).
+* **Behavior:** The agent matches classes by `(Name + Day of Week + Time Slot)`. It resolves that triple to the persistent course-template id (`eventTypeId`, stable across weeks) during schedule discovery and uses the per-instance id only at booking time.
+* **Schedule-change warning:** if a matched occurrence's actual weekday or time differs from the configured triple, the agent logs a warning and **skips booking that occurrence** rather than booking the wrong slot.
 
 ### FR-2: Deterministic Booking Window
 * **Intent:** Maximize the chances of securing a spot at the known release moment while keeping the runtime simple.
