@@ -17,11 +17,11 @@ The primary goal is to build a simple, automated Python daemon that monitors the
 * **Intent:** Allow users to define target classes easily in a configuration file without breaking when course instance IDs change week-to-week.
 * **Behavior:** The agent must match classes using a robust identifier strategy—preferring persistent parent/template IDs if available, or falling back to a combination of course attributes (e.g., Name + Day of Week + Time Slot).
 
-### FR-2: Adaptive Execution Timing
-* **Intent:** Maximize the chances of securing a spot both for precise drop times and for unexpected or last-minute openings.
+### FR-2: Deterministic Booking Window
+* **Intent:** Maximize the chances of securing a spot at the known release moment while keeping the runtime simple.
 * **Behavior:**
-  * **Routine Polling:** Run periodic background checks (e.g., every $N$ minutes) to catch unannounced drops or cancellations.
-  * **Spike Mode:** Trigger high-frequency polling bursts surrounding known class drop times (e.g., midnight or morning releases).
+  * **Discovery Scan:** Periodically query the schedule (e.g., a few times daily) to resolve target course instances and their exact release times.
+  * **Spike Mode:** Each target class reports its own authoritative release moment (`bookingInfo.bookingOpensOn`, i.e. class date − 2 days at 21:00 local). The agent schedules a parallel `Book` burst at exactly that instant, preceded by a single re-verification pass (~10 min before) to re-resolve the target's `classId` and detect schedule changes.
 
 ### FR-3: Single-Path Architecture
 * **Intent:** Keep the codebase simple and maintainable by avoiding complex, dynamic fallback logic at runtime.
@@ -45,3 +45,4 @@ The primary goal is to build a simple, automated Python daemon that monitors the
 ## 4. Explicitly Out of Scope (First Iteration)
 * External push notifications (e.g., WhatsApp, Telegram, or Email alerts).
 * Automated warning alerts if an expected recurring course is missing after its launch window.
+* **Cancellation monitoring:** freeing of spots via cancellations is handled outside the agent (facility emails the user); the daemon only books at known release windows.
