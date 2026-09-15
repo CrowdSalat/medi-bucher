@@ -107,6 +107,11 @@ Implementation plan in ralph-loop-sized tasks. Each task states **what** to buil
 
 ---
 
+## v1 Implementation Notes
+- **classId is stable across weekly instances** (observed live: same id for the 2026-09-21 and 2026-09-28 Wirbelsäulengym). `Book` is disambiguated by `partitionDate`; `booked_history` keys (account::partition_date::class_id) stay unique. T8's "classId unchanged" check is weaker than originally assumed.
+- Burst fires at `trigger_at − lead_s` (default 30s) in the phase-4 loop but the API hard-rejects before `bookingOpensOn`; phase 5 frees the exact trigger moment — keep `burst_lead_s` at 0 or small and rely on the verified pre-burst timing.
+- `startDate` from the API is naive (no offset); schedule-change weekday/time matching relies on account timezone (Europe/Berlin) being resolvable.
+
 ## v1 Definition of Done
 
 - `python -m booker --dry-run config.yaml` runs discovery → auth → plan without ever calling `Book`.
