@@ -1,0 +1,7 @@
+secrets/
+config.yaml
+booked_history.json
+*.log
+*.pyc
+__pycache__/
+.vscode
