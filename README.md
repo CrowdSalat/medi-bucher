@@ -82,7 +82,6 @@ PAYLOAD would POST …/class/Book {"classId":…, "partitionDate":20260921, "use
 - Bursts fire in parallel at `bookingOpensOn` (§5 of `03_design.md`).
 - No retry: the API's verdict is final; a full/waitlist class is logged, never re-attempted, and the waiting list is deliberately **not** joined.
 - Fixed booked courses only: a slot recorded in `booked_history.json` is never re-booked. If you want it again after cancelling, remove that entry from the file.
-- Same-day classes are never scheduled (per requirements FR-5).
 - Classes with equipment/station layouts (`hasLayout: true`) are a known v1 limitation — they need a station/gym-equipment choice the daemon doesn't make yet; such targets are reported, not booked.
 
 ## What lives where
