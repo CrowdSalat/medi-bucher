@@ -74,6 +74,7 @@ def build_parser():
     parser.add_argument("--config", default="config.yaml", help="config.yaml path")
     parser.add_argument("--account", default=None, help="account name (default: first available)")
     parser.add_argument("--days-ahead", type=int, default=3, help="min days to class start")
+    parser.add_argument("--class-id", default=None, help="pin a specific class id instead of auto-picking")
     parser.add_argument(
         "--confirm",
         action="store_true",
@@ -123,7 +124,18 @@ def main(argv=None) -> int:
     finally:
         schedule.close()
 
-    chosen = pick_instance(instances, now_utc, args.days_ahead)
+    chosen = None
+    if args.class_id:
+        chosen = next((i for i in instances if i.id == args.class_id), None)
+        if chosen is None:
+            print(
+                f"live_roundtrip: no instance with id {args.class_id!r} in the "
+                "next 14 days",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        chosen = pick_instance(instances, now_utc, args.days_ahead)
     if chosen is None:
         print(
             "live_roundtrip: no hasLayout:false class with an open booking "
