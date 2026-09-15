@@ -34,9 +34,8 @@ The primary goal is to build a simple, automated Python daemon that monitors the
 ---
 
 ## 3. Configuration & Operational Constraints
-* **Configuration:** All target preferences, user credentials, schedule timings, and mode settings must be declared in a simple `config.yaml`.
-* **Runtime:** Python 3.10+.
-* **Environment:** Designed to run continuously as a daemon process or scheduled service.
+
+Configuration and runtime design live in [`03_design.md`](03_design.md).
 
 ---
 
