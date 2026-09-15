@@ -1,0 +1,19 @@
+facility:
+  id: "0273e18b-52bf-404e-afa6-8bfb2eeccbad"
+  name: mediterana
+
+# Credentials per account are read from env at runtime:
+#   MEDI_CREDS_<NAME>_NAME = login email
+#   MEDI_CREDS_<NAME>_PW   = login password
+# Missing credentials skip that account (marked unavailable), not a startup error.
+accounts:
+  - name: jan                      # maps to MEDI_CREDS_JAN_NAME / MEDI_CREDS_JAN_PW
+    timezone: Europe/Berlin
+    targets:                       # list of classes to monitor
+      - name: "Wirbelsäulengym"    # schedule display name
+        day: 1                     # 1=Mon..7=Sun (matches facility series)
+        time: "19:00"              # HH:MM; (name, day, time) is the target identity
+        priority: 1                # lower = attempt first at release
+      - name: "Aqua Fitness"
+        day: 2
+        time: "17:00"

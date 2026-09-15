@@ -5,8 +5,7 @@ booked_history.json
 *.pyc
 __pycache__/
 .vscode
--env
 
 # local secrets (never commit)
 .env
-secrets/
+config.local.yaml
