@@ -25,9 +25,7 @@ The primary goal is to build a simple, automated Python daemon that monitors the
 
 ### FR-3: Single-Path Architecture
 * **Intent:** Keep the codebase simple and maintainable by avoiding complex, dynamic fallback logic at runtime.
-* **Behavior:** The agent will execute through a single, deterministic pipeline chosen during technical spikes:
-  * **Option A (API Engine):** Direct, lightweight HTTP requests if the REST API is accessible and unblocked.
-  * **Option B (Browser Automation):** Headless browser execution (Playwright) if bot protection or session management requires a full browser context.
+* **Behavior:** The agent executes through a single, deterministic pipeline (**Option A — API Engine**): direct HTTP requests using `httpx` with Bearer-token auth and keep-alive connections. Confirmed viable by spikes; no browser automation is needed.
 
 ### FR-4: Local State & Deduplication
 * **Intent:** Ensure the agent never attempts to re-book a slot it has already secured or spam the platform with redundant request loops.
