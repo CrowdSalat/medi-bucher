@@ -6,6 +6,9 @@ import yaml
 
 _TIME_RE = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 
+MEDITERANA_ID = "0273e18b-52bf-404e-afa6-8bfb2eeccbad"
+MEDITERANA_NAME = "mediterana"
+
 
 class ConfigError(ValueError):
     pass
@@ -37,7 +40,7 @@ class Facility:
 
 @dataclass
 class Config:
-    facility: Facility
+    facility: Facility = field(default_factory=lambda: Facility(id=MEDITERANA_ID, name=MEDITERANA_NAME))
     accounts: list[Account] = field(default_factory=list)
 
 
@@ -57,19 +60,6 @@ def load_config(path: str) -> Config:
 def parse_config(raw, source: str = "<config>") -> Config:
     if not isinstance(raw, dict):
         raise ConfigError(f"{source}: must be a YAML mapping")
-
-    facility_raw = raw.get("facility")
-    if not isinstance(facility_raw, dict):
-        raise ConfigError(f"{source}: 'facility' must be a mapping")
-    facility_id = facility_raw.get("id")
-    if not isinstance(facility_id, str) or not facility_id.strip():
-        raise ConfigError(f"{source}: 'facility.id' is required and must not be empty")
-    facility_name = facility_raw.get("name")
-    if facility_name is None:
-        facility_name = ""
-    if not isinstance(facility_name, str):
-        raise ConfigError(f"{source}: 'facility.name' must be a string")
-    facility = Facility(id=facility_id.strip(), name=facility_name.strip())
 
     accounts_raw = raw.get("accounts", [])
     if not isinstance(accounts_raw, list):
@@ -160,4 +150,4 @@ def parse_config(raw, source: str = "<config>") -> Config:
     if not accounts:
         raise ConfigError(f"{source}: no accounts configured")
 
-    return Config(facility=facility, accounts=accounts)
+    return Config(accounts=accounts)
