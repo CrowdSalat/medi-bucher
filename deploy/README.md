@@ -1,13 +1,15 @@
 # booker on OpenShift — operator runbook
 
 Deploys the [booker](../README.md) daemon (Mediterana / MyWellness course booking) as a
-single long-lived pod in its own namespace, with durable booking state.
+single long-lived pod, with durable booking state. The manifests here are consumed by Argo CD
+(ApplicationSet `external-manifests` in `ocp-gitops`) and deployed into namespace
+`app-medi-bucher` — the namespace is created by Argo CD (`CreateNamespace=true`), which is why
+there is no `namespace.yaml` here.
 
 ## What you get
 
 | File | Purpose |
 |---|---|
-| `namespace.yaml` | namespace `booker` |
 | `configmap.yaml` | `booker-config` — daemon config (accounts, targets), mounted read-only |
 | `externalsecret.yaml` | `booker-creds` — synced from Infisical by ExternalSecrets Operator |
 | `pvc.yaml` | `booker-history` — persists `booked_history.json` (this is *stateful*) |
@@ -15,17 +17,21 @@ single long-lived pod in its own namespace, with durable booking state.
 
 ## Deploy
 
+The ApplicationSet in the [`ocp-gitops`](https://github.com/CrowdSalat/ocp-gitops)
+repository points at this repo's `deploy/` directory (`gitops/bootstrap/apps-applicationset-external-manifests.yaml`).
+Merging to `main` here is picked up by Argo CD automatically (within the polling interval):
+
 ```bash
-# 1. Create the namespace, then everything in it.
-#    A single `oc apply -f deploy/` also works (it creates the namespace first).
-oc apply -f deploy/namespace.yaml
-oc apply -f deploy/
+# Trigger immediate evaluation of the ApplicationSets (skip ~3 min polling wait):
+oc annotate applicationset external-manifests -n openshift-gitops \
+  argocd.argoproj.io/refresh=hard --overwrite
 
-# 2. Wait until the pod is running.
-oc -n booker rollout status deploy/booker
+# Watch the generated Application:
+oc -n openshift-gitops get application booker
 
-# 3. Check the logs.
-oc -n booker logs deploy/booker
+# Once synced, wait for the pod and check the logs:
+oc -n app-medi-bucher rollout status deploy/booker
+oc -n app-medi-bucher logs deploy/booker
 ```
 
 ## Credentials — Infisical + ExternalSecrets (never commit them)
@@ -43,7 +49,7 @@ The `booker-creds` Secret is **not** a plain manifest here — it is created by
    - one `NAME`/`PW` pair per account; the account name in the ConfigMap must match the
      `MEDI_CREDS_<NAME>_*` prefix (name uppercased).
 2. The ExternalSecret refreshes every hour and creates/updates the `booker-creds` Secret.
-3. To push new values immediately: `oc -n booker rollout restart deploy/booker` (after the
+3. To push new values immediately: `oc -n app-medi-bucher rollout restart deploy/booker` (after the
    ExternalSecret picked them up) — or simply wait for the next roll-out.
 
 **Adding another account:** add the Infisical secrets, add the matching `data` entry in
@@ -57,7 +63,7 @@ other accounts keep running.
 Dry-run performs discovery only — no Book call is ever sent:
 
 ```bash
-oc -n booker rsh deploy/booker -- booker --dry-run /etc/booker/config.yaml
+oc -n app-medi-bucher rsh deploy/booker -- booker --dry-run /etc/booker/config.yaml
 ```
 
 Expect a line per planned burst like:
@@ -94,8 +100,8 @@ the daemon re-book. Back it up:
 
 ```bash
 # snapshot the file from a running pod (deploy/booker resolves to its first pod on OpenShift 4.x;
-# use the pod name from `oc -n booker get pods` if it doesn't)
-oc -n booker cp deploy/booker:/app/booked_history.json ./booked_history.backup.json
+# use the pod name from `oc -n app-medi-bucher get pods` if it doesn't)
+oc -n app-medi-bucher cp deploy/booker:/app/booked_history.json ./booked_history.backup.json
 
 # if you need to clear one entry, edit the file and copy it back
 ```
@@ -113,7 +119,7 @@ no `imagePullSecrets` on the Deployment.
 > `--with-creds`-style flow GHCR documents. Concretely:
 >
 > ```bash
-> oc -n booker create secret docker-registry ghcr-creds \
+> oc -n app-medi-bucher create secret docker-registry ghcr-creds \
 >   --docker-server=ghcr.io \
 >   --docker-username=<your-gh-username> \
 >   --docker-password=<PAT-or-token>
@@ -128,8 +134,8 @@ no `imagePullSecrets` on the Deployment.
 ## Updating
 
 ```bash
-oc -n booker set image deploy/booker booker=ghcr.io/CrowdSalat/medi-bucher:<new-tag>
-oc -n booker rollout status deploy/booker
+oc -n app-medi-bucher set image deploy/booker booker=ghcr.io/CrowdSalat/medi-bucher:<new-tag>
+oc -n app-medi-bucher rollout status deploy/booker
 ```
 
 ## Security posture (restricted-v2 SCC)

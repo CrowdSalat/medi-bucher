@@ -17,7 +17,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: booker
-  namespace: booker
   labels:
     app.kubernetes.io/part-of: medi-bucher
     app.kubernetes.io/name: booker
