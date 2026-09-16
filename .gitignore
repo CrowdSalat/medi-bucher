@@ -4,6 +4,7 @@ booked_history.json
 *.log
 *.pyc
 __pycache__/
+*.egg-info/
 .vscode
 
 # local secrets (never commit)
