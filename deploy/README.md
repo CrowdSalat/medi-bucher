@@ -140,8 +140,8 @@ oc -n app-medi-bucher rollout status deploy/booker
 
 ## Security posture (restricted-v2 SCC)
 
-- No fixed `runAsUser`/`runAsGroup` — OpenShift assigns the UID.
-- `fsGroup: 0` gives the pod's gid 0 write access to the PVC and the image's group-writable `/app`.
-- `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`,
-  `seccompProfile: RuntimeDefault` — all restricted-v2 compatible.
+- No explicit `runAsUser`/`runAsGroup`/`fsGroup` — the SCC assigns the UID and the fsGroup
+  from the project's range and chowns the PVC accordingly (the image runs as non-root).
+- Pod spec only sets `runAsNonRoot: true`; the rest (`allowPrivilegeEscalation: false`,
+  required capability drops, `seccompProfile: RuntimeDefault`) is provided by the SCC.
 - No privileged containers, no host mounts, no hostNetwork.

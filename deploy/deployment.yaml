@@ -35,12 +35,12 @@ spec:
         app.kubernetes.io/name: booker
         app.kubernetes.io/part-of: medi-bucher
     spec:
-      # restricted-v2 compatible: no fixed runAsUser/runAsGroup.
+      # SCC handles the rest (fsGroup, seccomp, capability drops, allowPrivilegeEscalation):
+      # explicitly setting fsGroup:0 here conflicts with restricted-v2's MustRunAs range.
+      # OpenShift assigns fsGroup from the project range and chowns the PVC to it, which the
+      # non-root user can then write through as a supplemental group.
       securityContext:
         runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
-        fsGroup: 0 # allow PVC write access via gid 0 (root group); OpenShift assigns the UID.
       containers:
         - name: booker
           image: ghcr.io/CrowdSalat/medi-bucher:latest
@@ -61,14 +61,6 @@ spec:
                 secretKeyRef:
                   name: booker-creds
                   key: MEDI_CREDS_JOHANNA_PW
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            seccompProfile:
-              type: RuntimeDefault
           # Probes: booker exposes no HTTP endpoint (no server), so HTTP probes are out.
           # The daemon also self-heals degradation by logging, re-login and suspension per
           # account — there is no external readiness signal to report. We therefore ship
