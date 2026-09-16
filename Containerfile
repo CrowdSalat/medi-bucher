@@ -10,6 +10,12 @@ RUN pip install --no-cache-dir --prefix=/install .
 # ── stage 2: runtime ─────────────────────────────────────────────
 FROM docker.io/library/python:3.12-slim AS runtime
 
+# Line-buffer stdout even when piped (kubelet/"oc logs"): Python buffers
+# stdout when it's not a tty, so without this the daemon logs appear empty.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
