@@ -1,0 +1,10 @@
+# Dedicated namespace for the booker daemon.
+# Keeps app, its stateful PVC, and its config/secret together and away from other workloads.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: booker
+  labels:
+    name: booker
+    app.kubernetes.io/part-of: medi-bucher
+    app.kubernetes.io/name: booker

@@ -1,0 +1,120 @@
+# booker daemon Deployment.
+#
+# One pod = one long-lived daemon (ENTRYPOINT `python3 -m booker`) that watches configured
+# targets and fires booking bursts at the class release moment. If operators prefer per-window
+# runs instead of the daemon, an ALTERNATE (not shipped here) CronJob with
+#   args: ["--once", "/etc/booker/config.yaml"]
+# can be used — see deploy/README.md. It needs the same ConfigMap/Secret/PVC wiring.
+#
+# Filesystem & security notes:
+# - Image runs as USER 65534:0 (nobody + gid 0), /app is chmod 775 / gid 0 in the
+#   Containerfile, so OpenShift's arbitrary UID (restricted-v2) can write there via gid 0.
+# - fsGroup: 0 makes the PVC mount writable by the pod's gid 0 (root group). This is the one
+#   exception to "no fixed UID" — it's a GID, not a UID, and it is explicitly allowed by
+#   restricted-v2.
+# - No fixed runAsUser/runAsGroup: OpenShift assigns the UID at runtime.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booker
+  namespace: booker
+  labels:
+    app.kubernetes.io/part-of: medi-bucher
+    app.kubernetes.io/name: booker
+spec:
+  replicas: 1
+  # Keep the default RollingUpdate strategy: booker carries durable state only in the PVC,
+  # so a rolling update is safe and gives zero downtime.
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: booker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: booker
+        app.kubernetes.io/part-of: medi-bucher
+    spec:
+      # restricted-v2 compatible: no fixed runAsUser/runAsGroup.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 0 # allow PVC write access via gid 0 (root group); OpenShift assigns the UID.
+      containers:
+        - name: booker
+          image: ghcr.io/CrowdSalat/medi-bucher:latest
+          # args replace the image CMD → runs `python3 -m booker /etc/booker/config.yaml`.
+          args:
+            - /etc/booker/config.yaml
+          env:
+            # Credential env vars pulled from the booker-creds Secret
+            # (created by deploy/externalsecret.yaml from Infisical).
+            # Account "johanna" here must match the account name in deploy/configmap.yaml.
+            - name: MEDI_CREDS_JOHANNA_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: booker-creds
+                  key: MEDI_CREDS_JOHANNA_NAME
+            - name: MEDI_CREDS_JOHANNA_PW
+              valueFrom:
+                secretKeyRef:
+                  name: booker-creds
+                  key: MEDI_CREDS_JOHANNA_PW
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          # Probes: booker exposes no HTTP endpoint (no server), so HTTP probes are out.
+          # The daemon also self-heals degradation by logging, re-login and suspension per
+          # account — there is no external readiness signal to report. We therefore ship
+          # ONLY a liveness probe with `exec: ["true"]`, which merely detects a hard crash
+          # (kubelet restarts the pod if the process exits). No readiness/startup probe:
+          # a transiently-busy daemon is still serving its single purpose, and a readiness
+          # probe would turn scheduler stalls into endpoint churn for no consumer.
+          livenessProbe:
+            exec:
+              command:
+                - "true"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+          # Modest footprint for a Python + httpx daemon doing one API call per target per
+          # discovery (every 6h) plus a short parallel burst at release time. 128Mi covers a
+          # couple of slow accounts comfortably; the limit just caps runaway memory use.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            # Config: single file, read-only. subPath keeps the mount a plain file at the
+            # path the container arg references.
+            - name: config
+              mountPath: /etc/booker/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            # History PVC at /app: the container WORKDIR where booked_history.json is
+            # written, so it persists across restarts (prevents re-booking).
+            - name: history
+              mountPath: /app
+      volumes:
+        - name: config
+          configMap:
+            name: booker-config
+            # Explicit items → also kills the auto-mount of other keys as files by omission.
+            items:
+              - key: config.yaml
+                path: config.yaml
+        - name: history
+          persistentVolumeClaim:
+            claimName: booker-history
+      # Public GHCR image: anonymous pull works, no imagePullSecrets needed. If the package
+      # ever becomes private, add a Secret + imagePullSecrets entry — see deploy/README.md.

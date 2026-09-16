@@ -1,0 +1,27 @@
+# Persistent volume for the daemon's booking state.
+#
+# booker writes `booked_history.json` into its working directory (/app); once a class is
+# recorded there it is never booked again (README "No re-booking"). Losing this file on a
+# pod restart would allow re-booking already-booked classes — so it MUST persist on a PVC,
+# not in an emptyDir that dies with the pod.
+#
+# ReadWriteOnce is enough: the Deployment is single-replica (replicas: 1) and OpenShift
+# can attach the volume to the pod's node. Do NOT use ReadWriteMany for this.
+#
+# storageClassName is intentionally omitted → the cluster default storage class is used.
+# If your cluster has no default, set it explicitly, e.g. `storageClassName: ocs-storagecluster-ceph-rbd`,
+# or `managed-csi` on ROSA/Rose.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: booker-history
+  namespace: booker
+  labels:
+    app.kubernetes.io/part-of: medi-bucher
+    app.kubernetes.io/name: booker
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

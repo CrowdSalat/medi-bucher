@@ -1,0 +1,26 @@
+# Daemon configuration (mirrors config.example.yaml).
+# The facility is hardcoded in the image (booker/config.py: MEDITERANA_ID) — do not set it here.
+# Credentials per account are read at runtime from the environment:
+#   MEDI_CREDS_<NAME>_NAME = login email
+#   MEDI_CREDS_<NAME>_PW   = login password
+# The daemon only *skips* an account whose creds are missing — it does not fail to start.
+# The env vars are wired to the booker-creds Secret (created by ExternalSecret from Infisical).
+# Credential values MUST never land in this file — keep them in Infisical.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: booker-config
+  namespace: booker
+  labels:
+    app.kubernetes.io/part-of: medi-bucher
+    app.kubernetes.io/name: booker
+data:
+  config.yaml: |
+    accounts:
+      - name: johanna                   # -> MEDI_CREDS_JOHANNA_NAME / MEDI_CREDS_JOHANNA_PW
+        timezone: Europe/Berlin         # used to map (day, time) onto the schedule
+        targets:                        # empty for now; add entries when needed:
+          # - name: "Wirbelsäulengym"   #   schedule display name
+          #   day: 1                    #   1=Mon..7=Sun
+          #   time: "19:00"             #   HH:MM; (name, day, time) is the target identity
+          #   priority: 1               #   lower = attempted first at release
