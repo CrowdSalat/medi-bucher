@@ -1,0 +1,33 @@
+name: GHCR cleanup
+
+# Periodic prune of the per-commit `sha-*` tags on GHCR.
+# Keeps `latest` and semver (v*) tags forever; deletes `sha-*` images older
+# than 2 weeks but always retains the 20 most recent so OpenShift rollbacks
+# never reference an already-deleted image.
+
+on:
+  schedule:
+    # Weekly, Monday 03:17 UTC (off-peak)
+    - cron: "17 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  packages: write
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: snok/container-retention-policy@v3.1.0
+        with:
+          account: CrowdSalat
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: "medi-bucher"
+          image-tags: "sha-*"
+          cut-off: 2w
+          keep-n-most-recent: 20
+          dry-run: false
+
+# NOTE: uses GITHUB_TOKEN (public preview for delete via REST). If package
+# deletion gets rejected, create a PAT with `delete:packages` and reference it
+# as ${{ secrets.GHCR_CLEANUP_TOKEN }} instead.
