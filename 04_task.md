@@ -128,8 +128,11 @@ Planning in progress — items below are intentions, not finalized tasks. Each s
 
 - **Containerize:** OCI image (`Containerfile`, non-root USER, no hardcoded UID — OpenShift `restricted-v2` SCC compatible), multi-arch AMD64+ARM64.
 - **CI/CD:** build the image and push it to a **public** container registry.
-  - Registry + naming to confirm: **GitHub Container Registry (GHCR)** vs docker.io; image name/tag scheme (semver + git SHA?).
-  - Credential strategy for the registry push.
+  - **Registry: decided — GHCR** (`ghcr.io`), public package.
+  - **Tag scheme: decided —** `latest` moving tag on newest main commit; `sha-<git-sha>` per push to main; `<semver>` (e.g. `v1.0.0`) on git tags.
+  - **Cost: none** — public repos get unlimited free Actions minutes; GHCR container storage/bandwidth is free for public packages.
+  - **Cleanup: decided —** `sha-*` tags cleaned by retention job (`snok/container-retention-policy@v3.1.0`, `cut-off: 2w`, `keep-n-most-recent: 20`); `latest` + semver never cleaned; multi-arch child manifests protected. Keep enough SHA builds so OpenShift rollbacks never reference a deleted image.
+  - Credential strategy for the registry push (GHCR uses `GITHUB_TOKEN` with `packages: write`).
 - **OpenShift manifests:** Deployment/service or long-lived Pod; Secret wiring for `MEDI_CREDS_*` and `config.yaml` (ConfigMap vs Secret); persistent volume for `booked_history.json` (or reconsider — see v2); probes/liveness; resource limits.
 - **"Maybe more" (candidates):** startup/shutdown behavior (SIGTERM handling in Pod lifecycle), standalone config validation image (sidecar/cron), observability, docs for operators.
 - Open questions to nail down tomorrow: does the daemon keep running permanently (daemon) or run per-window (CronJob/`--once`)? Volume persistence for history vs in-memory + re-scan semantics.
