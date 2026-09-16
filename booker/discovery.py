@@ -16,13 +16,22 @@ class ResolvedTarget:
     warnings: list[str] = field(default_factory=list)
 
 
+def _attach_or_convert(dt, tz: ZoneInfo):
+    if dt.tzinfo is None:
+        # MyWellness returns startDate without an offset (facility-local wall time);
+        # astimezone() on a naive value would assume the *process* tz (UTC in the
+        # container), silently shifting wall-clock hours. Treat it as already tz-local.
+        return dt.replace(tzinfo=tz)
+    return dt.astimezone(tz)
+
+
 def _instance_weekday(inst: ScheduleInstance, tz: ZoneInfo) -> int:
-    local = inst.start_date.astimezone(tz)
+    local = _attach_or_convert(inst.start_date, tz)
     return local.isoweekday()
 
 
 def _instance_time_str(inst: ScheduleInstance, tz: ZoneInfo) -> str:
-    local = inst.start_date.astimezone(tz)
+    local = _attach_or_convert(inst.start_date, tz)
     return local.strftime("%H:%M")
 
 
@@ -107,7 +116,7 @@ def build_catalog(
 
     catalog: dict[str, list[str]] = {}
     for inst in instances:
-        local = inst.start_date.astimezone(tz)
+        local = _attach_or_convert(inst.start_date, tz)
         wd = local.isoweekday()
         time_str = local.strftime("%H:%M")
         label = f"W{wd}@{time_str}"

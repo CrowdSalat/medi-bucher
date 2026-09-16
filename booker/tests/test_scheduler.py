@@ -163,6 +163,20 @@ class PlanTests(unittest.TestCase):
         )
         self.assertEqual(self.scheduler.plan({"a": self._resolved([wsg_target()], [inst_no_opens])}), [])
 
+    def test_resolve_matches_naive_start_date_in_account_tz(self):
+        berlin = ZoneInfo("Europe/Berlin")
+        target = Target(name="WSG", day=1, time="19:00")
+        inst = make_instance(
+            "id-19", "WSG",
+            dt.datetime(2026, 9, 21, 19, 0),  # naive, facility-local wall time
+            20260921, FUTURE_OPENS,
+        )
+        plan = self.scheduler.plan(
+            {"a": resolve_targets([inst], [target], berlin)}
+        )
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0].instance_id, "id-19")
+
 
 class VerifyTests(unittest.TestCase):
     def setUp(self) -> None:
