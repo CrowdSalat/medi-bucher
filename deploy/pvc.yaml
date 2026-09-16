@@ -1,6 +1,6 @@
 # Persistent volume for the daemon's booking state.
 #
-# booker writes `booked_history.json` into its working directory (/app); once a class is
+# medi-bucher writes `booked_history.json` into its working directory (/app); once a class is
 # recorded there it is never booked again (README "No re-booking"). Losing this file on a
 # pod restart would allow re-booking already-booked classes — so it MUST persist on a PVC,
 # not in an emptyDir that dies with the pod.
@@ -14,10 +14,10 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: booker-history
+  name: medi-bucher-history
   labels:
     app.kubernetes.io/part-of: medi-bucher
-    app.kubernetes.io/name: booker
+    app.kubernetes.io/name: medi-bucher
 spec:
   accessModes:
     - ReadWriteOnce

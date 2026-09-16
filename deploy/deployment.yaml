@@ -1,4 +1,4 @@
-# booker daemon Deployment.
+# medi-bucher daemon Deployment.
 #
 # One pod = one long-lived daemon (ENTRYPOINT `python3 -m booker`) that watches configured
 # targets and fires booking bursts at the class release moment. If operators prefer per-window
@@ -9,59 +9,53 @@
 # Filesystem & security notes:
 # - Image runs as USER 65534:0 (nobody + gid 0), /app is chmod 775 / gid 0 in the
 #   Containerfile, so OpenShift's arbitrary UID (restricted-v2) can write there via gid 0.
-# - fsGroup: 0 makes the PVC mount writable by the pod's gid 0 (root group). This is the one
-#   exception to "no fixed UID" — it's a GID, not a UID, and it is explicitly allowed by
-#   restricted-v2.
 # - No fixed runAsUser/runAsGroup: OpenShift assigns the UID at runtime.
+# - SCC fills fsGroup/seccompProfile/capabilities from the project-range defaults.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: booker
+  name: medi-bucher
   labels:
     app.kubernetes.io/part-of: medi-bucher
-    app.kubernetes.io/name: booker
+    app.kubernetes.io/name: medi-bucher
 spec:
   replicas: 1
-  # Keep the default RollingUpdate strategy: booker carries durable state only in the PVC,
-  # so a rolling update is safe and gives zero downtime.
+  # Keep the default RollingUpdate strategy: the daemon carries durable state only in the
+  # PVC, so a rolling update is safe and gives zero downtime.
   strategy:
     type: RollingUpdate
   selector:
     matchLabels:
-      app.kubernetes.io/name: booker
+      app.kubernetes.io/name: medi-bucher
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: booker
+        app.kubernetes.io/name: medi-bucher
         app.kubernetes.io/part-of: medi-bucher
     spec:
-      # SCC handles the rest (fsGroup, seccomp, capability drops, allowPrivilegeEscalation):
-      # explicitly setting fsGroup:0 here conflicts with restricted-v2's MustRunAs range.
-      # OpenShift assigns fsGroup from the project range and chowns the PVC to it, which the
-      # non-root user can then write through as a supplemental group.
       securityContext:
         runAsNonRoot: true
       containers:
-        - name: booker
-          image: ghcr.io/CrowdSalat/medi-bucher:latest
+        - name: medi-bucher
+          image: ghcr.io/crowdsalat/medi-bucher:latest
           # args replace the image CMD → runs `python3 -m booker /etc/booker/config.yaml`.
           args:
             - /etc/booker/config.yaml
           env:
-            # Credential env vars pulled from the booker-creds Secret
+            # Credential env vars pulled from the medi-bucher-creds Secret
             # (created by deploy/externalsecret.yaml from Infisical).
             # Account "johanna" here must match the account name in deploy/configmap.yaml.
             - name: MEDI_CREDS_JOHANNA_NAME
               valueFrom:
                 secretKeyRef:
-                  name: booker-creds
+                  name: medi-bucher-creds
                   key: MEDI_CREDS_JOHANNA_NAME
             - name: MEDI_CREDS_JOHANNA_PW
               valueFrom:
                 secretKeyRef:
-                  name: booker-creds
+                  name: medi-bucher-creds
                   key: MEDI_CREDS_JOHANNA_PW
-          # Probes: booker exposes no HTTP endpoint (no server), so HTTP probes are out.
+          # Probes: medi-bucher exposes no HTTP endpoint (no server), so HTTP probes are out.
           # The daemon also self-heals degradation by logging, re-login and suspension per
           # account — there is no external readiness signal to report. We therefore ship
           # ONLY a liveness probe with `exec: ["true"]`, which merely detects a hard crash
@@ -99,13 +93,13 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: booker-config
+            name: medi-bucher-config
             # Explicit items → also kills the auto-mount of other keys as files by omission.
             items:
               - key: config.yaml
                 path: config.yaml
         - name: history
           persistentVolumeClaim:
-            claimName: booker-history
+            claimName: medi-bucher-history
       # Public GHCR image: anonymous pull works, no imagePullSecrets needed. If the package
       # ever becomes private, add a Secret + imagePullSecrets entry — see deploy/README.md.

@@ -1,6 +1,6 @@
-# booker on OpenShift — operator runbook
+# medi-bucher on OpenShift — operator runbook
 
-Deploys the [booker](../README.md) daemon (Mediterana / MyWellness course booking) as a
+Deploys the [medi-bucher](../README.md) daemon (Mediterana / MyWellness course booking) as a
 single long-lived pod, with durable booking state. The manifests here are consumed by Argo CD
 (ApplicationSet `external-manifests` in `ocp-gitops`) and deployed into namespace
 `app-medi-bucher` — the namespace is created by Argo CD (`CreateNamespace=true`), which is why
@@ -10,10 +10,10 @@ there is no `namespace.yaml` here.
 
 | File | Purpose |
 |---|---|
-| `configmap.yaml` | `booker-config` — daemon config (accounts, targets), mounted read-only |
-| `externalsecret.yaml` | `booker-creds` — synced from Infisical by ExternalSecrets Operator |
-| `pvc.yaml` | `booker-history` — persists `booked_history.json` (this is *stateful*) |
-| `deployment.yaml` | Deployment `booker` — image, env, config mount, PVC mount, probes, resources |
+| `configmap.yaml` | `medi-bucher-config` — daemon config (accounts, targets), mounted read-only |
+| `externalsecret.yaml` | `medi-bucher-creds` — synced from Infisical by ExternalSecrets Operator |
+| `pvc.yaml` | `medi-bucher-history` — persists `booked_history.json` (this is *stateful*) |
+| `deployment.yaml` | Deployment `medi-bucher` — image, env, config mount, PVC mount, probes, resources |
 
 ## Deploy
 
@@ -27,16 +27,16 @@ oc annotate applicationset external-manifests -n openshift-gitops \
   argocd.argoproj.io/refresh=hard --overwrite
 
 # Watch the generated Application:
-oc -n openshift-gitops get application booker
+oc -n openshift-gitops get application medi-bucher
 
 # Once synced, wait for the pod and check the logs:
-oc -n app-medi-bucher rollout status deploy/booker
-oc -n app-medi-bucher logs deploy/booker
+oc -n app-medi-bucher rollout status deploy/medi-bucher
+oc -n app-medi-bucher logs deploy/medi-bucher
 ```
 
 ## Credentials — Infisical + ExternalSecrets (never commit them)
 
-The `booker-creds` Secret is **not** a plain manifest here — it is created by
+The `medi-bucher-creds` Secret is **not** a plain manifest here — it is created by
 `externalsecret.yaml` via the ExternalSecrets Operator, which syncs it from **Infisical**
 (`eu.infisical.com`, project `ocp`, environment `prod`) through the cluster-wide
 `infisical` ClusterSecretStore. No credential value ever lives in this repo.
@@ -48,8 +48,8 @@ The `booker-creds` Secret is **not** a plain manifest here — it is created by
    - `MEDI_CREDS_johanna_PW` → the account password
    - one `NAME`/`PW` pair per account; the account name in the ConfigMap must match the
      `MEDI_CREDS_<NAME>_*` prefix (name uppercased).
-2. The ExternalSecret refreshes every hour and creates/updates the `booker-creds` Secret.
-3. To push new values immediately: `oc -n app-medi-bucher rollout restart deploy/booker` (after the
+2. The ExternalSecret refreshes every hour and creates/updates the `medi-bucher-creds` Secret.
+3. To push new values immediately: `oc -n app-medi-bucher rollout restart deploy/medi-bucher` (after the
    ExternalSecret picked them up) — or simply wait for the next roll-out.
 
 **Adding another account:** add the Infisical secrets, add the matching `data` entry in
@@ -63,16 +63,16 @@ other accounts keep running.
 Dry-run performs discovery only — no Book call is ever sent:
 
 ```bash
-oc -n app-medi-bucher rsh deploy/booker -- booker --dry-run /etc/booker/config.yaml
+oc -n app-medi-bucher rsh deploy/medi-bucher -- booker --dry-run /etc/booker/config.yaml
 ```
 
 Expect a line per planned burst like:
 
 ```
-ACCOUNT=johanna TARGET=Wirbelsäulengym CLASSID=… OPENS=2026-… STATUS=eligible
+ACCOUNT=johanna TARGET=Body Pump CLASSID=… OPENS=2026-… STATUS=eligible
 ```
 
-Real daemon log example: `ACCOUNT=johanna TARGET=… STATUS=booked`.
+Real daemon log example: `ACCOUNT=johanna TARGET=Body Balance STATUS=booked`.
 
 ## One-shot runs (alternate mode, not shipped)
 
@@ -83,7 +83,7 @@ ConfigMap/Secret/PVC:
 ```yaml
 schedule: "0 21 * * 2,4"           # adjust to your classes' release days
 containers:
-  - image: ghcr.io/CrowdSalat/medi-bucher:latest
+  - image: ghcr.io/crowdsalat/medi-bucher:latest
     args: ["--once", "/etc/booker/config.yaml"]
     # same env/secretRefs, config volumeMount, and /app PVC mounts as deployment.yaml
 ```
@@ -94,14 +94,14 @@ re-booked, so overlap with the daemon is harmless.
 
 ## State / backups
 
-`booked_history.json` is written to `/app` (container WORKDIR), backed by the `booker-history`
+`booked_history.json` is written to `/app` (container WORKDIR), backed by the `medi-bucher-history`
 PVC. **It prevents re-booking a class that already has a booked record** — losing it can make
 the daemon re-book. Back it up:
 
 ```bash
-# snapshot the file from a running pod (deploy/booker resolves to its first pod on OpenShift 4.x;
+# snapshot the file from a running pod (deploy/medi-bucher resolves to its first pod on OpenShift 4.x;
 # use the pod name from `oc -n app-medi-bucher get pods` if it doesn't)
-oc -n app-medi-bucher cp deploy/booker:/app/booked_history.json ./booked_history.backup.json
+oc -n app-medi-bucher cp deploy/medi-bucher:/app/booked_history.json ./booked_history.backup.json
 
 # if you need to clear one entry, edit the file and copy it back
 ```
@@ -111,7 +111,7 @@ The PVC type depends on your cluster default storage class (`pvc.yaml` omits
 
 ## Image pull
 
-`ghcr.io/CrowdSalat/medi-bucher:latest` is a **public** GHCR package → anonymous pull works,
+`ghcr.io/crowdsalat/medi-bucher:latest` is a **public** GHCR package → anonymous pull works,
 no `imagePullSecrets` on the Deployment.
 
 > If the package ever becomes **private**: create a Secret with credentials, add
@@ -134,8 +134,8 @@ no `imagePullSecrets` on the Deployment.
 ## Updating
 
 ```bash
-oc -n app-medi-bucher set image deploy/booker booker=ghcr.io/CrowdSalat/medi-bucher:<new-tag>
-oc -n app-medi-bucher rollout status deploy/booker
+oc -n app-medi-bucher set image deploy/medi-bucher medi-bucher=ghcr.io/crowdsalat/medi-bucher:<new-tag>
+oc -n app-medi-bucher rollout status deploy/medi-bucher
 ```
 
 ## Security posture (restricted-v2 SCC)
