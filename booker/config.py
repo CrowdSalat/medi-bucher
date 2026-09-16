@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 
 import yaml
 
+from .auth import Credentials
+
 _TIME_RE = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 
 MEDITERANA_ID = "0273e18b-52bf-404e-afa6-8bfb2eeccbad"
@@ -28,6 +30,7 @@ class Account:
     name: str
     timezone: str = "UTC"
     targets: list[Target] = field(default_factory=list)
+    credentials: Credentials | None = None
     available: bool = True
     skip_reason: str | None = None
 
@@ -136,12 +139,24 @@ def parse_config(raw, source: str = "<config>") -> Config:
         env_prefix = f"MEDI_CREDS_{name.upper()}"
         cred_name = os.environ.get(f"{env_prefix}_NAME")
         cred_pw = os.environ.get(f"{env_prefix}_PW")
-        available = bool(cred_name) and bool(cred_pw)
+
+        username = acc_raw.get("username")
+        password = acc_raw.get("password")
+        inline: bool = isinstance(username, str) and bool(username) and isinstance(password, str) and bool(password)
+        if inline:
+            credentials = Credentials(username=username, password=password)
+        elif cred_name and cred_pw:
+            credentials = Credentials(username=cred_name, password=cred_pw)
+        else:
+            credentials = None
+        available = credentials is not None
+
         accounts.append(
             Account(
                 name=name,
                 timezone=timezone.strip(),
                 targets=targets,
+                credentials=credentials,
                 available=available,
                 skip_reason=None if available else "missing credentials",
             )

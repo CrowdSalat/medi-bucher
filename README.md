@@ -24,25 +24,25 @@ python3 -m pip install -e .
 
 ## Configuration
 
-Runtime, read by the daemon (not committed): a [`.env`](`.env`) you source in the shell before starting booker — or export by hand. One account is keyed by `MEDI_CREDS_<NAME>`:
+Credentials are per-account: either inline in `config.yaml` (`username`/`password`
+below) or in env vars `MEDI_CREDS_<NAME>` (`_NAME` and `_PW`). Inline wins; missing
+credentials are a warning, not an error — that account is just skipped.
+
+Local/dev env fallback (keyed per account):
 
 ```
 export MEDI_CREDS_JAN_NAME=example@example.de
 export MEDI_CREDS_JAN_PW=...
 ```
 
-Missing credentials for an account are a warning, not an error — that account is just skipped.
-
 Config file — start from [`config.example.yaml`](config.example.yaml):
 
 ```yaml
-facility:
-  id: "0273e18b-52bf-404e-afa6-8bfb2eeccbad"   # Mediterana
-  name: mediterana
-
 accounts:
   - name: jan                    # -> MEDI_CREDS_JAN_NAME / MEDI_CREDS_JAN_PW
     timezone: Europe/Berlin      # used to map (day, time) onto the schedule
+    username: ""                 # optional inline email
+    password: ""                 # optional inline password
     targets:
       - name: "Wirbelsäulengym"  # schedule display name
         day: 1                   # 1=Mon..7=Sun
@@ -53,13 +53,14 @@ accounts:
         time: "17:00"
 ```
 
+The facility (Mediterana) is hardcoded in `booker/config.py` — do not set it here.
+
 Target `day`/`time` must match an actual occurrence in the schedule (double-check against `docs/course_catalog.md` or `--dry-run`); a target that resolves to nothing is reported rather than silently ignored.
 
 ## Usage
 
 ```bash
-# What would happen? No Book call is ever sent in dry-run.
-source ./.env
+# Running locally: source the .env (env fallback) or edit inline creds in config.yaml.
 python3 -m booker --dry-run config.yaml
 
 # Run one discovery + booking pass for bursts due right now, then exit.

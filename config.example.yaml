@@ -1,12 +1,16 @@
-# Credentials per account are read from env at runtime:
-#   MEDI_CREDS_<NAME>_NAME = login email
-#   MEDI_CREDS_<NAME>_PW   = login password
+# Credentials per account: either inline below (username/password) or from env at
+# runtime (MEDI_CREDS_<NAME>_NAME / MEDI_CREDS_<NAME>_PW). Inline credentials win.
 # Missing credentials skip that account (marked unavailable), not a startup error.
+#
+# In OpenShift this whole file is stored as the MEDI_CONFIG Infisical secret and
+# mounted read-only at /etc/booker/config.yaml — never put it in git.
 #
 # The facility (Mediterana) is hardcoded in booker/config.py — do not set it here.
 accounts:
-  - name: jan                      # maps to MEDI_CREDS_JAN_NAME / MEDI_CREDS_JAN_PW
+  - name: jan                      # maps to MEDI_CREDS_JAN_NAME / MEDI_CREDS_JAN_PW if not inline
     timezone: Europe/Berlin
+    username: ""                   # optional: inline login email
+    password: ""                   # optional: inline login password
     targets:                       # list of classes to monitor
       - name: "Wirbelsäulengym"    # schedule display name
         day: 1                     # 1=Mon..7=Sun (matches facility series)

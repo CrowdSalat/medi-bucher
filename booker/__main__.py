@@ -74,15 +74,20 @@ def _today_int_for(accounts) -> int:
 def build_scheduler(cfg, accounts, *, dry_run: bool = False) -> Scheduler:
     account_targets = {}
     account_tz = {}
+    account_credentials = {}
     for account in accounts:
         account_targets[account.name] = account.targets
         account_tz[account.name] = account.timezone
+        if account.credentials is not None:
+            account_credentials[account.name] = account.credentials
     scheduler = Scheduler(
         facility_id=cfg.facility.id,
         account_targets=account_targets,
         account_tz=account_tz,
         schedule_client_factory=ScheduleClient,
-        auth_client_factory=AuthClient,
+        auth_client_factory=lambda name: AuthClient(
+            name, credentials=account_credentials.get(name)
+        ),
     )
     history = BookedHistory()
     history.prune(_today_int_for(accounts))
@@ -178,10 +183,10 @@ def main(argv: list[str] | None = None) -> int:
 
     for account in cfg.accounts:
         if not account.available:
-            env_prefix = f"MEDI_CREDS_{account.name.upper()}"
             print(
-                f"warning: account {account.name}: {env_prefix}_NAME and/or "
-                f"{env_prefix}_PW not set; account will be skipped",
+                f"warning: account {account.name}: no credentials in config "
+                f"(missing 'username'/'password' and {account.name.upper()} env "
+                f"fallback); account will be skipped",
                 file=sys.stderr,
             )
 
@@ -189,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     accounts = [a for a in cfg.accounts if a.available]
     if not accounts:
-        print("booker: no available accounts (all missing credentials); nothing to schedule")
+        print("booker: no available accounts (no credentials); nothing to schedule")
         return 0
 
     if args.dry_run:
