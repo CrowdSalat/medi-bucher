@@ -4,7 +4,7 @@
 # targets and fires booking bursts at the class release moment. If operators prefer per-window
 # runs instead of the daemon, an ALTERNATE (not shipped here) CronJob with
 #   args: ["--once", "/etc/booker/config.yaml"]
-# can be used — see deploy/README.md. It needs the same ConfigMap/Secret/PVC wiring.
+# can be used — see deploy/README.md. It needs the same Secret/PVC wiring.
 #
 # Filesystem & security notes:
 # - Image runs as USER 65534:0 (nobody + gid 0), /app is chmod 775 / gid 0 in the
@@ -41,20 +41,6 @@ spec:
           # args replace the image CMD → runs `python3 -m booker /etc/booker/config.yaml`.
           args:
             - /etc/booker/config.yaml
-          env:
-            # Credential env vars pulled from the medi-bucher-creds Secret
-            # (created by deploy/externalsecret.yaml from Infisical).
-            # Account "johanna" here must match the account name in deploy/configmap.yaml.
-            - name: MEDI_CREDS_JOHANNA_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: medi-bucher-creds
-                  key: MEDI_CREDS_JOHANNA_NAME
-            - name: MEDI_CREDS_JOHANNA_PW
-              valueFrom:
-                secretKeyRef:
-                  name: medi-bucher-creds
-                  key: MEDI_CREDS_JOHANNA_PW
           # Probes: medi-bucher exposes no HTTP endpoint (no server), so HTTP probes are out.
           # The daemon also self-heals degradation by logging, re-login and suspension per
           # account — there is no external readiness signal to report. We therefore ship
@@ -80,8 +66,10 @@ spec:
               cpu: 500m
               memory: 512Mi
           volumeMounts:
-            # Config: single file, read-only. subPath keeps the mount a plain file at the
-            # path the container arg references.
+            # Config: single file, read-only, sourced from the medi-bucher-config Secret
+            # (created by deploy/externalsecret.yaml from Infisical MEDI_CONFIG — includes
+            # credentials inline). subPath keeps the mount a plain file at the path the
+            # container arg references.
             - name: config
               mountPath: /etc/booker/config.yaml
               subPath: config.yaml
@@ -92,12 +80,8 @@ spec:
               mountPath: /app
       volumes:
         - name: config
-          configMap:
-            name: medi-bucher-config
-            # Explicit items → also kills the auto-mount of other keys as files by omission.
-            items:
-              - key: config.yaml
-                path: config.yaml
+          secret:
+            secretName: medi-bucher-config
         - name: history
           persistentVolumeClaim:
             claimName: medi-bucher-history

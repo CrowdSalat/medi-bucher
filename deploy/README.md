@@ -6,14 +6,16 @@ single long-lived pod, with durable booking state. The manifests here are consum
 `app-medi-bucher` — the namespace is created by Argo CD (`CreateNamespace=true`), which is why
 there is no `namespace.yaml` here.
 
+**Everything sensitive lives in Infisical**: the full `config.yaml` — accounts, targets, and
+credentials — is a single secret. Nothing sensitive is in this repo.
+
 ## What you get
 
 | File | Purpose |
 |---|---|
-| `configmap.yaml` | `medi-bucher-config` — daemon config (accounts, targets), mounted read-only |
-| `externalsecret.yaml` | `medi-bucher-creds` — synced from Infisical by ExternalSecrets Operator |
+| `externalsecret.yaml` | `medi-bucher-config` — syncs Infisical `MEDI_CONFIG` → Secret key `config.yaml` |
 | `pvc.yaml` | `medi-bucher-history` — persists `booked_history.json` (this is *stateful*) |
-| `deployment.yaml` | Deployment `medi-bucher` — image, env, config mount, PVC mount, probes, resources |
+| `deployment.yaml` | Deployment `medi-bucher` — mounts the Secret as config, PVC for state, probes, resources |
 
 ## Deploy
 
@@ -34,26 +36,27 @@ oc -n app-medi-bucher rollout status deploy/medi-bucher
 oc -n app-medi-bucher logs deploy/medi-bucher
 ```
 
-## Credentials — Infisical + ExternalSecrets (never commit them)
+## The config lives in Infisical (never in git)
 
-The `medi-bucher-creds` Secret is **not** a plain manifest here — it is created by
-`externalsecret.yaml` via the ExternalSecrets Operator, which syncs it from **Infisical**
-(`eu.infisical.com`, project `ocp`, environment `prod`) through the cluster-wide
-`infisical` ClusterSecretStore. No credential value ever lives in this repo.
+The daemon's config — accounts, targets, and credentials — is stored as a **single Infisical
+secret** and synced to the `medi-bucher-config` Secret by `externalsecret.yaml`
+(ExternalSecrets Operator → ClusterSecretStore `infisical` → `eu.infisical.com`, project `ocp`,
+environment `prod`). It is mounted read-only at `/etc/booker/config.yaml` and read by the app
+via `username`/`password` inline per account.
 
-**To set credentials for the first time:**
-1. In Infisical (eu.infisical.com — not the US instance), add secrets for each account in
-   `configmap.yaml` — key names are the *same* env var names the app uses:
-   - `MEDI_CREDS_johanna_NAME` → the account login email (or a lookup on `ocp` project)
-   - `MEDI_CREDS_johanna_PW` → the account password
-   - one `NAME`/`PW` pair per account; the account name in the ConfigMap must match the
-     `MEDI_CREDS_<NAME>_*` prefix (name uppercased).
-2. The ExternalSecret refreshes every hour and creates/updates the `medi-bucher-creds` Secret.
-3. To push new values immediately: `oc -n app-medi-bucher rollout restart deploy/medi-bucher` (after the
-   ExternalSecret picked them up) — or simply wait for the next roll-out.
-
-**Adding another account:** add the Infisical secrets, add the matching `data` entry in
-`externalsecret.yaml`, and add the account block in `configmap.yaml`.
+**To create/update it (e.g. first time, or changing targets):**
+1. In Infisical (eu.infisical.com), add/update the secret **`MEDI_CONFIG`** with the full
+   `config.yaml` text — see [config.example.yaml](../config.example.yaml) for the schema, with
+   `username` and `password` filled in for each account.
+2. The ExternalSecret refreshes every hour; the daemon re-mount does **not** auto-reload config,
+   so after the refresh force a rollout to pick it up:
+   ```bash
+   oc -n app-medi-bucher rollout restart deploy/medi-bucher
+   ```
+3. Check the log shows the account as `available` and the targets listed:
+   ```bash
+   oc -n app-medi-bucher logs deploy/medi-bucher
+   ```
 
 Missing/invalid credentials are **not** fatal: the account is suspended and logged, the
 other accounts keep running.
@@ -78,14 +81,14 @@ Real daemon log example: `ACCOUNT=johanna TARGET=Body Balance STATUS=booked`.
 
 The Deployment runs the long-lived daemon (`booker /etc/booker/config.yaml`). If you prefer
 per-window runs, create a CronJob (a small extra manifest) that uses the same
-ConfigMap/Secret/PVC:
+Secret/PVC wiring:
 
 ```yaml
 schedule: "0 21 * * 2,4"           # adjust to your classes' release days
 containers:
   - image: ghcr.io/crowdsalat/medi-bucher:latest
     args: ["--once", "/etc/booker/config.yaml"]
-    # same env/secretRefs, config volumeMount, and /app PVC mounts as deployment.yaml
+    # same config volumeMount (medi-bucher-config Secret) and /app PVC mounts as deployment.yaml
 ```
 
 `--once` runs one discovery + burst pass for bursts due *now* and exits — safe for
@@ -145,3 +148,5 @@ oc -n app-medi-bucher rollout status deploy/medi-bucher
 - Pod spec only sets `runAsNonRoot: true`; the rest (`allowPrivilegeEscalation: false`,
   required capability drops, `seccompProfile: RuntimeDefault`) is provided by the SCC.
 - No privileged containers, no host mounts, no hostNetwork.
+- Credentials and targets never appear in git — only the (public) Infisical secret `MEDI_CONFIG`
+  and the synced K8s Secret hold them.
