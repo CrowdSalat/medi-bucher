@@ -16,7 +16,7 @@ from .scheduler import (
     Scheduler,
     format_burst_line,
 )
-from .state import BookedHistory
+from .state import AuthStatus, BookedHistory
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,6 +94,7 @@ def build_scheduler(cfg, accounts, *, dry_run: bool = False) -> Scheduler:
     if not dry_run:
         history.save()
     scheduler.history = history
+    scheduler.auth_status = AuthStatus()
     scheduler.on_burst = BurstFire(
         executor_factory=_executor_factory(scheduler, dry_run),
         history=history,

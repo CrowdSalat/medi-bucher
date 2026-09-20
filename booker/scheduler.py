@@ -9,7 +9,7 @@ from .book import BurstExecutor, SUCCESS_RESULTS
 from .client import AuthClient, ScheduleClient, ScheduleInstance
 from .config import Target
 from .discovery import ResolvedTarget, resolve_targets
-from .state import BookedHistory
+from .state import AuthStatus, BookedHistory
 
 DEFAULT_DISCOVERY_CADENCE_S = 6 * 3600
 DEFAULT_HORIZON_DAYS = 14
@@ -17,6 +17,7 @@ DEFAULT_BURST_LEAD_S = 30
 DEFAULT_PREVERIFY_WINDOW_S = 10 * 60
 
 STATUS_ELIGIBLE = "eligible"
+STATUS_SKIP_AUTH = "skip_auth_failed"
 STATUS_SKIP_INSTANCE_GONE = "skip_instance_gone"
 STATUS_SKIP_OPENS_SHIFTED = "skip_opens_shifted"
 STATUS_SKIP_ALREADY_BOOKED = "skip_already_booked"
@@ -36,6 +37,7 @@ class PlannedBurst:
     fire_toward: _dt.datetime
     status: str = STATUS_ELIGIBLE
     reason: str = ""
+    auth_status: str = "unknown"
 
 
 def _utc_now() -> _dt.datetime:
@@ -181,14 +183,19 @@ def format_burst_line(burst: PlannedBurst) -> str:
     return (
         f"ACCOUNT={burst.account_name} TARGET={burst.target.name} "
         f"CLASSID={burst.instance_id} OPENS={burst.trigger_at.isoformat()} "
-        f"START={burst.fire_toward.isoformat()} STATUS={burst.status}{suffix}"
+        f"START={burst.fire_toward.isoformat()} STATUS={burst.status} "
+        f"AUTH={burst.auth_status}{suffix}"
     )
 
 
 def format_verify_line(burst: PlannedBurst) -> str:
     if burst.status == STATUS_ELIGIBLE:
-        return f"VERIFY {burst.instance_id} OK"
-    return f"VERIFY {burst.instance_id} FAIL: {burst.status} ({burst.reason})"
+        return f"VERIFY {burst.instance_id} OK AUTH={burst.auth_status}"
+    suffix = f" ({burst.reason})" if burst.reason else ""
+    return (
+        f"VERIFY {burst.instance_id} FAIL: {burst.status} "
+        f"AUTH={burst.auth_status}{suffix}"
+    )
 
 
 async def _default_sleep(seconds: float) -> None:
@@ -277,9 +284,53 @@ class Scheduler:
         self._suspended: set[str] = set()
         self._last_instances_by_account: dict[str, list[ScheduleInstance]] = {}
         self.history: BookedHistory | None = None
+        self.auth_status: AuthStatus | None = None
 
     def auth_client(self, account_name: str) -> AuthClient | None:
         return self._auth_clients.get(account_name)
+
+    def _auth_ok(self, account_name: str) -> bool:
+        return (
+            account_name in self._auth_clients
+            and account_name not in self._suspended
+        )
+
+    def _record_auth(
+        self, account_name: str, ok: bool, *, user_id: str | None = None
+    ) -> None:
+        if self.auth_status is not None:
+            self.auth_status.set(account_name, ok, user_id=user_id)
+            self.auth_status.save()
+
+    def _drop_auth_client(self, account_name: str) -> None:
+        client = self._auth_clients.pop(account_name, None)
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+    def verify_auth(self, account_name: str) -> bool:
+        """Refresh the account's session (fresh login + user-id resolve) so a
+        queued burst fires on a known-good token; suspends on failure."""
+        client = self._auth_clients.get(account_name)
+        if client is None:
+            self._record_auth(account_name, False)
+            return False
+        try:
+            client.refresh()
+        except Exception as exc:
+            self._drop_auth_client(account_name)
+            self._suspended.add(account_name)
+            self._record_auth(account_name, False)
+            print(
+                f"error: account {account_name}: session refresh failed "
+                f"({type(exc).__name__}); suspended"
+            )
+            return False
+        self._record_auth(account_name, True, user_id=client.user_id)
+        print(f"auth: account {account_name} status=ok user_id={client.user_id}")
+        return True
 
     def plan(
         self,
@@ -331,21 +382,24 @@ class Scheduler:
 
     async def authenticate_all(self) -> None:
         for name in self.account_targets:
-            if name in self._suspended:
-                continue
-            client = self._auth_factory(name)
-            self._auth_clients[name] = client
+            client = self._auth_clients.get(name)
+            if client is None:
+                client = self._auth_factory(name)
+                self._auth_clients[name] = client
             try:
                 client.authenticate()
             except Exception as exc:
-                self._auth_clients.pop(name, None)
+                self._drop_auth_client(name)
                 self._suspended.add(name)
+                self._record_auth(name, False)
                 print(
                     f"error: account {name}: authentication failed "
                     f"({type(exc).__name__}), suspended until next discovery"
                 )
                 continue
-            print(f"auth: account {name} user_id={getattr(client, 'user_id', None)}")
+            self._suspended.discard(name)
+            self._record_auth(name, True, user_id=client.user_id)
+            print(f"auth: account {name} status=ok user_id={client.user_id}")
 
     def _schedule(self) -> ScheduleClient:
         if self._schedule_client is None:
@@ -353,6 +407,7 @@ class Scheduler:
         return self._schedule_client
 
     async def discovery_pass(self, verify: bool = True) -> list[PlannedBurst]:
+        await self.authenticate_all()
         now = self.now_fn()
         from_date = now.date()
         to_date = from_date + _dt.timedelta(days=self.horizon_days)
@@ -369,6 +424,10 @@ class Scheduler:
         self._last_instances_by_account = {name: instances for name in resolved_by_account}
 
         plan = self.plan(resolved_by_account)
+        for burst in plan:
+            burst.auth_status = (
+                "ok" if self._auth_ok(burst.account_name) else "failed"
+            )
         print(
             f"discovery: fetched {len(instances)} instances "
             f"({from_date}..{to_date}); {len(plan)} burst(s) scheduled"
@@ -406,6 +465,16 @@ class Scheduler:
                             self.account_tz.get(burst.account_name, "UTC"),
                             self.history,
                         )
+                        if burst.status == STATUS_ELIGIBLE:
+                            if self.verify_auth(burst.account_name):
+                                burst.auth_status = "ok"
+                            else:
+                                burst.auth_status = "failed"
+                                burst.status = STATUS_SKIP_AUTH
+                                burst.reason = (
+                                    "account session refresh failed; "
+                                    "burst cancelled"
+                                )
                         verified.add(id(burst))
                         print(format_verify_line(burst))
 
