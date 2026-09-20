@@ -37,7 +37,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: medi-bucher
-          image: ghcr.io/crowdsalat/medi-bucher:latest
+          image: ghcr.io/crowdsalat/medi-bucher:sha-b7d8a4d
           # args replace the image CMD → runs `python3 -m booker /etc/booker/config.yaml`.
           args:
             - /etc/booker/config.yaml
